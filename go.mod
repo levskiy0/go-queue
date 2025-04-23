@@ -1,4 +1,4 @@
-module github.com/owles/go-queue
+module github.com/levskiy0/go-queue
 
 go 1.23.1
 

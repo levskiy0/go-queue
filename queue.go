@@ -2,7 +2,7 @@ package go_queue
 
 import (
 	mlog "github.com/RichardKnop/machinery/v2/log"
-	"github.com/owles/go-queue/contract"
+	"github.com/levskiy0/go-queue/contract"
 	"log/slog"
 )
 

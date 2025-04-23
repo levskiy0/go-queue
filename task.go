@@ -3,7 +3,7 @@ package go_queue
 import (
 	"fmt"
 	"github.com/RichardKnop/machinery/v2"
-	"github.com/owles/go-queue/contract"
+	"github.com/levskiy0/go-queue/contract"
 	"log/slog"
 	"time"
 

@@ -1,7 +1,7 @@
 package go_queue
 
 import (
-	"github.com/owles/go-queue/contract"
+	"github.com/levskiy0/go-queue/contract"
 	"log/slog"
 )
 

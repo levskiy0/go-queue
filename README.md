@@ -5,7 +5,7 @@ Fork from [Goravel](https://github.com/goravel/framework) for single use by nece
 ### Install
 
 ```shell
-go get guthub.com/owles/go-queue 
+go get guthub.com/levskiy0/go-queue 
 ```
 
 ### Usage
