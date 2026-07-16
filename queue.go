@@ -34,7 +34,7 @@ func (q *Queue) Worker(args ...contract.Args) contract.Worker {
 		args[0].Connection = defaultConnection
 	}
 
-	return NewWorker(q.connections, q.log, args[0].Concurrent, args[0].Connection, q.jobs, args[0].Queue)
+	return NewWorker(q.connections, q.log, args[0].Concurrent, args[0].Connection, q.jobs, args[0].Queue).WithRateLimit(args[0].RateLimit)
 }
 
 func (q *Queue) Register(jobs []contract.Job) {

@@ -10,8 +10,6 @@ import (
 )
 
 var testSyncJob = 0
-var testAsyncJob = 0
-var mu sync.Mutex
 
 type TestSyncJob struct {
 }
@@ -27,6 +25,8 @@ func (receiver *TestSyncJob) Handle(args ...any) error {
 }
 
 type TestAsyncJob struct {
+	mu    sync.Mutex
+	calls int
 }
 
 func (receiver *TestAsyncJob) Signature() string {
@@ -34,19 +34,26 @@ func (receiver *TestAsyncJob) Signature() string {
 }
 
 func (receiver *TestAsyncJob) Handle(args ...any) error {
-	mu.Lock()
-	defer mu.Unlock()
+	receiver.mu.Lock()
+	defer receiver.mu.Unlock()
 
-	testAsyncJob++
+	receiver.calls++
 
 	return nil
+}
+
+func (receiver *TestAsyncJob) Calls() int {
+	receiver.mu.Lock()
+	defer receiver.mu.Unlock()
+
+	return receiver.calls
 }
 
 func TestSync(t *testing.T) {
 	conns := NewConnections()
 	conns.Add("default", &Connection{Driver: DriverSync})
 
-	q := NewQueue(conns, nil, false)
+	q := NewQueue(conns, nil, true)
 	err := q.Job(&TestSyncJob{}, []contract.Arg{
 		{Type: "string", Value: "TestSyncQueue"},
 		{Type: "int", Value: 1},
@@ -70,10 +77,10 @@ func TestAsyncQueue(t *testing.T) {
 		Password: "",
 	}})
 
-	q := NewQueue(conns, slog.Default(), false)
-	q.Register([]contract.Job{
-		&TestAsyncJob{},
-	})
+	q := NewQueue(conns, slog.Default(), true)
+
+	job := &TestAsyncJob{}
+	q.Register([]contract.Job{job})
 
 	go func(ctx context.Context) {
 		err := q.Worker(contract.Args{
@@ -91,19 +98,19 @@ func TestAsyncQueue(t *testing.T) {
 		}
 	}(ctx)
 
-	q.Job(&TestAsyncJob{}, []contract.Arg{
+	q.Job(job, []contract.Arg{
 		{Type: "string", Value: "TestAsyncQueue"},
 		{Type: "int", Value: 1},
 	}).OnConnection("redis").OnQueue("custom").Dispatch()
 
-	q.Job(&TestAsyncJob{}, []contract.Arg{
+	q.Job(job, []contract.Arg{
 		{Type: "string", Value: "TestAsyncQueue"},
 		{Type: "int", Value: 2},
 	}).OnConnection("redis").OnQueue("custom").Dispatch()
 
 	time.Sleep(2 * time.Second)
 
-	if testAsyncJob != 2 {
+	if job.Calls() != 2 {
 		t.Fail()
 	}
 }
@@ -121,15 +128,15 @@ func TestChainQueue(t *testing.T) {
 		Password: "",
 	}})
 
-	q := NewQueue(conns, slog.Default(), false)
-	q.Register([]contract.Job{
-		&TestAsyncJob{},
-	})
+	q := NewQueue(conns, slog.Default(), true)
+
+	job := &TestAsyncJob{}
+	q.Register([]contract.Job{job})
 
 	go func(ctx context.Context) {
 		err := q.Worker(contract.Args{
 			Connection: "redis",
-			Queue:      "custom",
+			Queue:      "custom_chain",
 			Concurrent: 2,
 		}).Run()
 
@@ -144,24 +151,24 @@ func TestChainQueue(t *testing.T) {
 
 	q.Chain([]contract.Jobs{
 		{
-			Job: &TestAsyncJob{},
+			Job: job,
 			Args: []contract.Arg{
 				{Type: "string", Value: "TestChainAsyncQueue"},
 				{Type: "int", Value: 1},
 			},
 		},
 		{
-			Job: &TestAsyncJob{},
+			Job: job,
 			Args: []contract.Arg{
 				{Type: "string", Value: "TestChainAsyncQueue"},
 				{Type: "int", Value: 2},
 			},
 		},
-	}).OnConnection("redis").OnQueue("custom").Dispatch()
+	}).OnConnection("redis").OnQueue("custom_chain").Dispatch()
 
 	time.Sleep(2 * time.Second)
 
-	if testAsyncJob != 2 {
+	if job.Calls() != 2 {
 		t.Fail()
 	}
 }

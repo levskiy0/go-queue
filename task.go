@@ -11,14 +11,16 @@ import (
 )
 
 type Task struct {
-	connections *Connections
-	connection  string
-	chain       bool
-	delay       *time.Time
-	machinery   *Machinery
-	jobs        []contract.Jobs
-	queue       string
-	server      *machinery.Server
+	connections  *Connections
+	connection   string
+	chain        bool
+	delay        *time.Time
+	machinery    *Machinery
+	jobs         []contract.Jobs
+	queue        string
+	server       *machinery.Server
+	retries      int
+	retryTimeout time.Duration
 }
 
 func NewTask(connections *Connections, log *slog.Logger, job contract.Job, args []contract.Arg) *Task {
@@ -105,6 +107,18 @@ func (receiver *Task) OnQueue(queue string) contract.Task {
 	return receiver
 }
 
+func (receiver *Task) Retries(count int) contract.Task {
+	receiver.retries = count
+
+	return receiver
+}
+
+func (receiver *Task) RetryAfter(initial time.Duration) contract.Task {
+	receiver.retryTimeout = initial
+
+	return receiver
+}
+
 func (receiver *Task) handleChain(jobs []contract.Jobs) error {
 	var signatures []*tasks.Signature
 	for _, job := range jobs {
@@ -117,9 +131,11 @@ func (receiver *Task) handleChain(jobs []contract.Jobs) error {
 		}
 
 		signatures = append(signatures, &tasks.Signature{
-			Name: job.Job.Signature(),
-			Args: realArgs,
-			ETA:  receiver.delay,
+			Name:         job.Job.Signature(),
+			Args:         realArgs,
+			ETA:          receiver.delay,
+			RetryCount:   receiver.retries,
+			RetryTimeout: retryTimeoutSeconds(receiver.retryTimeout),
 		})
 	}
 
@@ -143,15 +159,33 @@ func (receiver *Task) handleAsync(job contract.Job, args []contract.Arg) error {
 	}
 
 	_, err := receiver.server.SendTask(&tasks.Signature{
-		Name: job.Signature(),
-		Args: realArgs,
-		ETA:  receiver.delay,
+		Name:         job.Signature(),
+		Args:         realArgs,
+		ETA:          receiver.delay,
+		RetryCount:   receiver.retries,
+		RetryTimeout: retryTimeoutSeconds(receiver.retryTimeout),
 	})
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func retryTimeoutSeconds(d time.Duration) int {
+	if d <= 0 {
+		return 0
+	}
+
+	seconds := d / time.Second
+	if d%time.Second != 0 {
+		seconds++
+	}
+	if seconds < 1 {
+		seconds = 1
+	}
+
+	return int(seconds)
 }
 
 func (receiver *Task) handleSync(job contract.Job, args []contract.Arg) error {

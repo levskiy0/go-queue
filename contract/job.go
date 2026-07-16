@@ -7,6 +7,10 @@ type Job interface {
 	Handle(args ...any) error
 }
 
+type JobWithNoRetry interface {
+	NoRetry(err error) bool
+}
+
 type Jobs struct {
 	Job  Job
 	Args []Arg

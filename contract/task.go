@@ -15,4 +15,6 @@ type Task interface {
 	OnConnection(connection string) Task
 	// OnQueue sets the queue of the task.
 	OnQueue(queue string) Task
+	Retries(count int) Task
+	RetryAfter(initial time.Duration) Task
 }

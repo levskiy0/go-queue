@@ -11,16 +11,29 @@ type Worker struct {
 	machinery  *Machinery
 	jobs       []contract.Job
 	queue      string
+	log        *slog.Logger
+	rateLimit  *contract.RateLimit
 }
 
 func NewWorker(connections *Connections, log *slog.Logger, concurrent int, connection string, jobs []contract.Job, queue string) *Worker {
+	if log == nil {
+		log = slog.Default()
+	}
+
 	return &Worker{
 		concurrent: concurrent,
 		connection: connection,
 		machinery:  NewMachinery(connections, log),
 		jobs:       jobs,
 		queue:      queue,
+		log:        log,
 	}
+}
+
+func (receiver *Worker) WithRateLimit(rateLimit *contract.RateLimit) *Worker {
+	receiver.rateLimit = rateLimit
+
+	return receiver
 }
 
 func (receiver *Worker) Run() error {
@@ -32,7 +45,12 @@ func (receiver *Worker) Run() error {
 		return nil
 	}
 
-	jobTasks, err := jobs2Tasks(receiver.jobs)
+	queue := receiver.queue
+	if queue == "" {
+		queue = server.GetConfig().DefaultQueue
+	}
+
+	jobTasks, err := jobs2Tasks(receiver.jobs, receiver.log, queue, receiver.rateLimit)
 	if err != nil {
 		return err
 	}
@@ -41,9 +59,7 @@ func (receiver *Worker) Run() error {
 		return err
 	}
 
-	if receiver.queue == "" {
-		receiver.queue = server.GetConfig().DefaultQueue
-	}
+	receiver.queue = queue
 	if receiver.concurrent == 0 {
 		receiver.concurrent = 1
 	}

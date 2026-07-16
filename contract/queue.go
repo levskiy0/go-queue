@@ -1,5 +1,7 @@
 package contract
 
+import "time"
+
 type Queue interface {
 	Worker(args ...Args) Worker
 	// Register register jobs
@@ -23,6 +25,13 @@ type Args struct {
 	Queue string
 	// Concurrent num
 	Concurrent int
+	RateLimit  *RateLimit
+}
+
+type RateLimit struct {
+	Limit int
+	Per   time.Duration
+	Key   func(args []any) string
 }
 
 type Arg struct {

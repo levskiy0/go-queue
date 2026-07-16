@@ -45,7 +45,7 @@ func (m *Machinery) redisServer(connection string, queue string) *machinery.Serv
 
 	cnf := &config.Config{
 		DefaultQueue: queue,
-		Redis:        &config.RedisConfig{},
+		Redis:        &config.RedisConfig{DelayedTasksPollPeriod: 100},
 	}
 
 	dsn := ""
