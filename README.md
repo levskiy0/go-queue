@@ -1,6 +1,6 @@
 # go-queue
 
-Version: v1.4.0
+Version: v1.4.1
 
 Fork from [Goravel](https://github.com/goravel/framework) for single use by necessary.
 

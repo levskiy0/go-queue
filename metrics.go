@@ -30,6 +30,7 @@ type metricsRegistry struct {
 	mu          sync.Mutex
 	clients     map[string]*redis.Client
 	closed      bool
+	workers     map[*workerMetrics]struct{}
 	startedAt   time.Time
 	localMu     sync.RWMutex
 	local       map[string]*localQueueMetrics
@@ -53,7 +54,7 @@ type workerMetrics struct {
 	processed  atomic.Uint64
 	succeeded  atomic.Uint64
 	failed     atomic.Uint64
-	stopOnce   sync.Once
+	state      atomic.Int32
 	stop       chan struct{}
 	done       chan struct{}
 }
@@ -66,6 +67,7 @@ func newMetricsRegistry(connections *Connections, log *slog.Logger) *metricsRegi
 		connections: connections,
 		log:         log,
 		clients:     make(map[string]*redis.Client),
+		workers:     make(map[*workerMetrics]struct{}),
 		startedAt:   time.Now().UTC(),
 		local:       make(map[string]*localQueueMetrics),
 	}
@@ -75,7 +77,7 @@ func (m *metricsRegistry) worker(connection, queue string, workers int) *workerM
 	if workers < 1 {
 		workers = 1
 	}
-	return &workerMetrics{
+	worker := &workerMetrics{
 		registry:   m,
 		connection: connection,
 		queue:      normalizeQueue(queue),
@@ -85,6 +87,12 @@ func (m *metricsRegistry) worker(connection, queue string, workers int) *workerM
 		stop:       make(chan struct{}),
 		done:       make(chan struct{}),
 	}
+	m.mu.Lock()
+	if !m.closed {
+		m.workers[worker] = struct{}{}
+	}
+	m.mu.Unlock()
+	return worker
 }
 
 func (m *metricsRegistry) client(connection string) (*redis.Client, error) {
@@ -286,6 +294,20 @@ func (m *metricsRegistry) close() error {
 		m.mu.Unlock()
 		return nil
 	}
+	workers := make([]*workerMetrics, 0, len(m.workers))
+	for worker := range m.workers {
+		workers = append(workers, worker)
+	}
+	m.mu.Unlock()
+	for _, worker := range workers {
+		worker.close()
+	}
+
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
 	m.closed = true
 	clients := make([]*redis.Client, 0, len(m.clients))
 	for _, client := range m.clients {
@@ -304,7 +326,7 @@ func (m *metricsRegistry) close() error {
 }
 
 func (w *workerMetrics) start() {
-	if w == nil {
+	if w == nil || !w.state.CompareAndSwap(0, 1) {
 		return
 	}
 	w.publish()
@@ -328,8 +350,21 @@ func (w *workerMetrics) close() {
 	if w == nil {
 		return
 	}
-	w.stopOnce.Do(func() { close(w.stop) })
-	<-w.done
+	previous := w.state.Swap(2)
+	if previous == 1 {
+		close(w.stop)
+		<-w.done
+	}
+	w.registry.unregister(w)
+}
+
+func (m *metricsRegistry) unregister(worker *workerMetrics) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	delete(m.workers, worker)
+	m.mu.Unlock()
 }
 
 func (w *workerMetrics) begin() {

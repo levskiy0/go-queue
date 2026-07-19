@@ -139,6 +139,31 @@ func TestStatsTracksSyncDriverLocally(t *testing.T) {
 	}
 }
 
+func TestQueueCloseRemovesAllWorkerSnapshots(t *testing.T) {
+	server := miniredis.RunT(t)
+	host, port := splitTestRedisAddress(t, server.Addr())
+	queue := NewQueue(metricsTestConnections(host, port), nil, false)
+	first := queue.metrics.worker("redis", "first", 1)
+	second := queue.metrics.worker("redis", "second", 1)
+	first.start()
+	second.start()
+
+	members, err := server.ZMembers(metricsWorkersKey())
+	if err != nil || len(members) != 2 {
+		t.Fatalf("worker index = %v, err = %v", members, err)
+	}
+	if err := queue.Close(); err != nil {
+		t.Fatal(err)
+	}
+	members, err = server.ZMembers(metricsWorkersKey())
+	if err == nil && len(members) != 0 {
+		t.Fatalf("worker index after close = %v", members)
+	}
+	if server.Exists(metricsWorkerKey(first.id)) || server.Exists(metricsWorkerKey(second.id)) {
+		t.Fatal("worker snapshot remains after close")
+	}
+}
+
 func metricsTestConnections(host, port string) *Connections {
 	connections := NewConnections()
 	connections.Add("redis", &Connection{
