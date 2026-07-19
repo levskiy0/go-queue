@@ -24,10 +24,14 @@ type Task struct {
 }
 
 func NewTask(connections *Connections, log *slog.Logger, job contract.Job, args []contract.Arg) *Task {
+	return newTask(connections, NewMachinery(connections, log), job, args)
+}
+
+func newTask(connections *Connections, machinery *Machinery, job contract.Job, args []contract.Arg) *Task {
 	return &Task{
 		connections: connections,
 		connection:  connections.GetDefault(),
-		machinery:   NewMachinery(connections, log),
+		machinery:   machinery,
 		jobs: []contract.Jobs{
 			{
 				Job:  job,
@@ -38,11 +42,15 @@ func NewTask(connections *Connections, log *slog.Logger, job contract.Job, args 
 }
 
 func NewChainTask(connections *Connections, log *slog.Logger, jobs []contract.Jobs) *Task {
+	return newChainTask(connections, NewMachinery(connections, log), jobs)
+}
+
+func newChainTask(connections *Connections, machinery *Machinery, jobs []contract.Jobs) *Task {
 	return &Task{
 		connections: connections,
 		connection:  connections.GetDefault(),
 		chain:       true,
-		machinery:   NewMachinery(connections, log),
+		machinery:   machinery,
 		jobs:        jobs,
 	}
 }
@@ -63,7 +71,7 @@ func (receiver *Task) Dispatch() error {
 		return receiver.DispatchSync()
 	}
 
-	server, err := receiver.machinery.Server(receiver.connection, receiver.queue)
+	server, err := receiver.machinery.Producer(receiver.connection)
 	if err != nil {
 		return err
 	}
@@ -133,6 +141,7 @@ func (receiver *Task) handleChain(jobs []contract.Jobs) error {
 		signatures = append(signatures, &tasks.Signature{
 			Name:         job.Job.Signature(),
 			Args:         realArgs,
+			RoutingKey:   receiver.routingKey(),
 			ETA:          receiver.delay,
 			RetryCount:   receiver.retries,
 			RetryTimeout: retryTimeoutSeconds(receiver.retryTimeout),
@@ -161,6 +170,7 @@ func (receiver *Task) handleAsync(job contract.Job, args []contract.Arg) error {
 	_, err := receiver.server.SendTask(&tasks.Signature{
 		Name:         job.Signature(),
 		Args:         realArgs,
+		RoutingKey:   receiver.routingKey(),
 		ETA:          receiver.delay,
 		RetryCount:   receiver.retries,
 		RetryTimeout: retryTimeoutSeconds(receiver.retryTimeout),
@@ -170,6 +180,14 @@ func (receiver *Task) handleAsync(job contract.Job, args []contract.Arg) error {
 	}
 
 	return nil
+}
+
+func (receiver *Task) routingKey() string {
+	if receiver.queue == "" {
+		return "default"
+	}
+
+	return receiver.queue
 }
 
 func retryTimeoutSeconds(d time.Duration) int {

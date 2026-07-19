@@ -8,6 +8,7 @@ import (
 	"github.com/RichardKnop/machinery/v2/config"
 	"github.com/RichardKnop/machinery/v2/locks/eager"
 	"log/slog"
+	"sync"
 )
 
 type Machinery struct {
@@ -17,6 +18,35 @@ type Machinery struct {
 
 func NewMachinery(connections *Connections, log *slog.Logger) *Machinery {
 	return &Machinery{log: log, connections: connections}
+}
+
+func (m *Machinery) Producer(connection string) (*machinery.Server, error) {
+	if m.connections == nil {
+		return nil, fmt.Errorf("no connections found")
+	}
+
+	store := m.connections.producers()
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	if server := store.servers[connection]; server != nil {
+		return server, nil
+	}
+
+	server, err := m.Server(connection, "default")
+	if err != nil {
+		return nil, err
+	}
+	if server != nil {
+		store.servers[connection] = server
+	}
+
+	return server, nil
+}
+
+type producerStore struct {
+	mu      sync.Mutex
+	servers map[string]*machinery.Server
 }
 
 func (m *Machinery) Server(connection string, queue string) (*machinery.Server, error) {

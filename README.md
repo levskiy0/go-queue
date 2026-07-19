@@ -1,6 +1,6 @@
 # go-queue
 
-Version: v1.3.0
+Version: v1.3.1
 
 Fork from [Goravel](https://github.com/goravel/framework) for single use by necessary.
 
@@ -64,6 +64,10 @@ q.Job(job, args).OnQueue("notify:telegram").Retries(5).RetryAfter(5 * time.Secon
 `Retries(count)` is the number of retries after the first failed attempt (`count=3` means up to 4 executions total). Failed attempts are republished to the queue with a Fibonacci backoff (`1s, 2s, 3s, 5s, 8s, ...` from the default seed of `0`). `RetryAfter(initial)` seeds that progression instead of starting from `0` — the actual first delay is `FibonacciNext(initial)`, so `RetryAfter(5 * time.Second)` produces `8s, 13s, 21s, ...`. Both apply to every signature of a chain.
 
 `DispatchSync` (and `Dispatch` on a `sync` connection) ignores both — see "Sync driver" below.
+
+### Producer reuse
+
+Redis producers are shared by all tasks that use the same `Connections` instance and connection name. `Dispatch` is safe for concurrent use and routes each task through its signature, so different queues share one producer without creating a Machinery server and scheduler for every task.
 
 To stop retrying on a specific error, have your job implement `contract.JobWithNoRetry`:
 

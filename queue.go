@@ -10,6 +10,7 @@ type Queue struct {
 	connections *Connections
 	jobs        []contract.Job
 	log         *slog.Logger
+	machinery   *Machinery
 }
 
 func NewQueue(connections *Connections, log *slog.Logger, debug bool) *Queue {
@@ -20,6 +21,7 @@ func NewQueue(connections *Connections, log *slog.Logger, debug bool) *Queue {
 	return &Queue{
 		connections: connections,
 		log:         log,
+		machinery:   NewMachinery(connections, log),
 	}
 }
 
@@ -46,9 +48,9 @@ func (q *Queue) GetJobs() []contract.Job {
 }
 
 func (q *Queue) Job(job contract.Job, args []contract.Arg) contract.Task {
-	return NewTask(q.connections, q.log, job, args)
+	return newTask(q.connections, q.machinery, job, args)
 }
 
 func (q *Queue) Chain(jobs []contract.Jobs) contract.Task {
-	return NewChainTask(q.connections, q.log, jobs)
+	return newChainTask(q.connections, q.machinery, jobs)
 }

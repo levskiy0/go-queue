@@ -1,6 +1,10 @@
 package go_queue
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/RichardKnop/machinery/v2"
+)
 
 type Driver string
 
@@ -24,8 +28,18 @@ type Connection struct {
 type Connections struct {
 	defaultConnection string
 
-	list map[string]*Connection
-	mu   sync.Mutex
+	list          map[string]*Connection
+	mu            sync.Mutex
+	producerOnce  sync.Once
+	producerStore *producerStore
+}
+
+func (c *Connections) producers() *producerStore {
+	c.producerOnce.Do(func() {
+		c.producerStore = &producerStore{servers: make(map[string]*machinery.Server)}
+	})
+
+	return c.producerStore
 }
 
 func NewConnections() *Connections {

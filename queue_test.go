@@ -107,6 +107,9 @@ func TestAsyncQueue(t *testing.T) {
 		{Type: "string", Value: "TestAsyncQueue"},
 		{Type: "int", Value: 2},
 	}).OnConnection("redis").OnQueue("custom").Dispatch()
+	if len(conns.producers().servers) != 1 {
+		t.Fatalf("producers = %d, want 1", len(conns.producers().servers))
+	}
 
 	time.Sleep(2 * time.Second)
 
@@ -165,6 +168,9 @@ func TestChainQueue(t *testing.T) {
 			},
 		},
 	}).OnConnection("redis").OnQueue("custom_chain").Dispatch()
+	if len(conns.producers().servers) != 1 {
+		t.Fatalf("producers = %d, want 1", len(conns.producers().servers))
+	}
 
 	time.Sleep(2 * time.Second)
 
