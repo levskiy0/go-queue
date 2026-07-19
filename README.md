@@ -1,6 +1,6 @@
 # go-queue
 
-Version: v1.3.2
+Version: v1.3.3
 
 Fork from [Goravel](https://github.com/goravel/framework) for single use by necessary.
 
@@ -68,6 +68,8 @@ q.Job(job, args).OnQueue("notify:telegram").Retries(5).RetryAfter(5 * time.Secon
 ### Producer reuse
 
 Redis producers are shared by all tasks that use the same `Connections` instance and connection name. `Dispatch` is safe for concurrent use and routes each task through its signature, so different queues share one producer without creating a Machinery server and scheduler for every task.
+
+Set `RedisConfig.ResultRetention` to control how long task result keys remain in Redis. A zero value keeps the Machinery default.
 
 ### Logging
 

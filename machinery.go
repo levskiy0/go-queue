@@ -9,6 +9,7 @@ import (
 	"github.com/RichardKnop/machinery/v2/locks/eager"
 	"log/slog"
 	"sync"
+	"time"
 )
 
 type Machinery struct {
@@ -74,8 +75,9 @@ func (m *Machinery) redisServer(connection string, queue string) *machinery.Serv
 	conn := m.connections.Get(connection)
 
 	cnf := &config.Config{
-		DefaultQueue: queue,
-		Redis:        &config.RedisConfig{DelayedTasksPollPeriod: 100},
+		DefaultQueue:    queue,
+		ResultsExpireIn: resultRetentionSeconds(conn.Redis.ResultRetention),
+		Redis:           &config.RedisConfig{DelayedTasksPollPeriod: 100},
 	}
 
 	dsn := ""
@@ -90,4 +92,17 @@ func (m *Machinery) redisServer(connection string, queue string) *machinery.Serv
 	lock := eager.New()
 
 	return machinery.NewServer(cnf, broker, backend, lock)
+}
+
+func resultRetentionSeconds(retention time.Duration) int {
+	if retention <= 0 {
+		return 0
+	}
+
+	seconds := retention / time.Second
+	if retention%time.Second != 0 {
+		seconds++
+	}
+
+	return int(seconds)
 }

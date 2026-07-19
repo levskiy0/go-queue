@@ -2,6 +2,7 @@ package go_queue
 
 import (
 	"sync"
+	"time"
 
 	"github.com/RichardKnop/machinery/v2"
 )
@@ -14,10 +15,11 @@ const (
 )
 
 type RedisConfig struct {
-	Host     string
-	Port     string
-	Password string
-	Database int
+	Host            string
+	Port            string
+	Password        string
+	Database        int
+	ResultRetention time.Duration
 }
 
 type Connection struct {
