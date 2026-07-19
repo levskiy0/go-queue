@@ -1,10 +1,14 @@
 package go_queue
 
 import (
+	"log/slog"
+	"sync"
+
 	mlog "github.com/RichardKnop/machinery/v2/log"
 	"github.com/levskiy0/go-queue/contract"
-	"log/slog"
 )
+
+var machineryLogOnce sync.Once
 
 type Queue struct {
 	connections *Connections
@@ -14,9 +18,16 @@ type Queue struct {
 }
 
 func NewQueue(connections *Connections, log *slog.Logger, debug bool) *Queue {
-	if !debug {
-		mlog.SetDebug(&EmptyLogger{})
+	if log == nil {
+		log = slog.Default()
 	}
+	machineryLogOnce.Do(func() {
+		mlog.SetDebug(newMachineryLogger(log, slog.LevelDebug, debug))
+		mlog.SetInfo(newMachineryLogger(log, slog.LevelInfo, true))
+		mlog.SetWarning(newMachineryLogger(log, slog.LevelWarn, true))
+		mlog.SetError(newMachineryLogger(log, slog.LevelError, true))
+		mlog.SetFatal(newMachineryLogger(log, slog.LevelError, true))
+	})
 
 	return &Queue{
 		connections: connections,
