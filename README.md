@@ -1,6 +1,6 @@
 # go-queue
 
-Version: v1.3.3
+Version: v1.4.0
 
 Fork from [Goravel](https://github.com/goravel/framework) for single use by necessary.
 
@@ -70,6 +70,21 @@ q.Job(job, args).OnQueue("notify:telegram").Retries(5).RetryAfter(5 * time.Secon
 Redis producers are shared by all tasks that use the same `Connections` instance and connection name. `Dispatch` is safe for concurrent use and routes each task through its signature, so different queues share one producer without creating a Machinery server and scheduler for every task.
 
 Set `RedisConfig.ResultRetention` to control how long task result keys remain in Redis. A zero value keeps the Machinery default.
+
+### Distributed stats
+
+Redis workers publish live snapshots to the queue Redis database. Snapshots contain worker capacity, active executions, and attempt counters for each queue. They are refreshed every two seconds and expire after ten seconds, so a crashed process disappears without explicit cleanup. `Stats` aggregates all live worker processes and reads the pending list length for every active queue:
+
+```go
+stats, err := q.Stats(ctx)
+if err != nil {
+    return err
+}
+
+log.Printf("workers=%d/%d processed=%d pending=%d", stats.WorkersActive, stats.WorkersTotal, stats.Processed, stats.Pending)
+```
+
+Attempt counters include retries but exclude rate-limit reschedules. They describe the current live worker sessions and reset when workers restart. Metrics writes happen on the heartbeat path rather than on every task execution. Call `q.Close()` during application shutdown to close metrics Redis connections; worker snapshots are also protected by TTL when a process exits abruptly.
 
 ### Logging
 

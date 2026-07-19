@@ -11,7 +11,7 @@ import (
 
 const minRateLimitRetryDelay = 100 * time.Millisecond
 
-func jobs2Tasks(jobs []contract.Job, log *slog.Logger, queue string, rateLimit *contract.RateLimit) (map[string]any, error) {
+func jobs2Tasks(jobs []contract.Job, log *slog.Logger, queue string, rateLimit *contract.RateLimit, observers ...*workerMetrics) (map[string]any, error) {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -26,6 +26,10 @@ func jobs2Tasks(jobs []contract.Job, log *slog.Logger, queue string, rateLimit *
 	}
 
 	result := make(map[string]any)
+	var metrics *workerMetrics
+	if len(observers) > 0 {
+		metrics = observers[0]
+	}
 
 	for _, job := range jobs {
 		if job.Signature() == "" {
@@ -36,13 +40,17 @@ func jobs2Tasks(jobs []contract.Job, log *slog.Logger, queue string, rateLimit *
 			return nil, fmt.Errorf("duplicate Job signature: %s", job.Signature())
 		}
 
-		result[job.Signature()] = wrapJob(job, log, queue, rateLimit, limiters)
+		result[job.Signature()] = wrapJob(job, log, queue, rateLimit, limiters, metrics)
 	}
 
 	return result, nil
 }
 
-func wrapJob(job contract.Job, log *slog.Logger, queue string, rateLimit *contract.RateLimit, limiters *keyedLimiters) func(args ...any) error {
+func wrapJob(job contract.Job, log *slog.Logger, queue string, rateLimit *contract.RateLimit, limiters *keyedLimiters, observers ...*workerMetrics) func(args ...any) error {
+	var metrics *workerMetrics
+	if len(observers) > 0 {
+		metrics = observers[0]
+	}
 	return func(args ...any) error {
 		if limiters != nil {
 			key := queue
@@ -59,7 +67,16 @@ func wrapJob(job contract.Job, log *slog.Logger, queue string, rateLimit *contra
 			}
 		}
 
+		metrics.begin()
+		completed := false
+		defer func() {
+			if !completed {
+				metrics.finish(fmt.Errorf("job handler panicked"))
+			}
+		}()
 		err := job.Handle(args...)
+		metrics.finish(err)
+		completed = true
 		if err == nil {
 			return nil
 		}

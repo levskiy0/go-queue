@@ -21,6 +21,7 @@ type Task struct {
 	server       *machinery.Server
 	retries      int
 	retryTimeout time.Duration
+	metrics      *metricsRegistry
 }
 
 func NewTask(connections *Connections, log *slog.Logger, job contract.Job, args []contract.Arg) *Task {
@@ -212,5 +213,18 @@ func (receiver *Task) handleSync(job contract.Job, args []contract.Arg) error {
 		realArgs = append(realArgs, arg.Value)
 	}
 
-	return job.Handle(realArgs...)
+	var metrics *localQueueMetrics
+	if receiver.metrics != nil {
+		metrics = receiver.metrics.beginLocal(receiver.routingKey())
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			receiver.metrics.finishLocal(metrics, fmt.Errorf("job handler panicked"))
+		}
+	}()
+	err := job.Handle(realArgs...)
+	receiver.metrics.finishLocal(metrics, err)
+	completed = true
+	return err
 }

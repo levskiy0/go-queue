@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/RichardKnop/machinery/v2 v2.0.13
 	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/redis/go-redis/v9 v9.6.3
 	golang.org/x/time v0.15.0
 )
 
@@ -33,7 +34,6 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rabbitmq/amqp091-go v1.9.0 // indirect
-	github.com/redis/go-redis/v9 v9.6.3 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.0.2 // indirect

@@ -6,16 +6,24 @@ import (
 )
 
 type Worker struct {
-	concurrent int
-	connection string
-	machinery  *Machinery
-	jobs       []contract.Job
-	queue      string
-	log        *slog.Logger
-	rateLimit  *contract.RateLimit
+	concurrent  int
+	connection  string
+	machinery   *Machinery
+	jobs        []contract.Job
+	queue       string
+	log         *slog.Logger
+	rateLimit   *contract.RateLimit
+	metrics     *metricsRegistry
+	ownsMetrics bool
 }
 
 func NewWorker(connections *Connections, log *slog.Logger, concurrent int, connection string, jobs []contract.Job, queue string) *Worker {
+	worker := newWorker(connections, log, concurrent, connection, jobs, queue, newMetricsRegistry(connections, log))
+	worker.ownsMetrics = true
+	return worker
+}
+
+func newWorker(connections *Connections, log *slog.Logger, concurrent int, connection string, jobs []contract.Job, queue string, metrics *metricsRegistry) *Worker {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -27,6 +35,7 @@ func NewWorker(connections *Connections, log *slog.Logger, concurrent int, conne
 		jobs:       jobs,
 		queue:      queue,
 		log:        log,
+		metrics:    metrics,
 	}
 }
 
@@ -37,6 +46,9 @@ func (receiver *Worker) WithRateLimit(rateLimit *contract.RateLimit) *Worker {
 }
 
 func (receiver *Worker) Run() error {
+	if receiver.ownsMetrics {
+		defer receiver.metrics.close()
+	}
 	server, err := receiver.machinery.Server(receiver.connection, receiver.queue)
 	if err != nil {
 		return err
@@ -50,7 +62,8 @@ func (receiver *Worker) Run() error {
 		queue = server.GetConfig().DefaultQueue
 	}
 
-	jobTasks, err := jobs2Tasks(receiver.jobs, receiver.log, queue, receiver.rateLimit)
+	metrics := receiver.metrics.worker(receiver.connection, queue, receiver.concurrent)
+	jobTasks, err := jobs2Tasks(receiver.jobs, receiver.log, queue, receiver.rateLimit, metrics)
 	if err != nil {
 		return err
 	}
@@ -64,6 +77,8 @@ func (receiver *Worker) Run() error {
 		receiver.concurrent = 1
 	}
 	worker := server.NewWorker(receiver.queue, receiver.concurrent)
+	metrics.start()
+	defer metrics.close()
 	if err := worker.Launch(); err != nil {
 		return err
 	}

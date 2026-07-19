@@ -1,6 +1,7 @@
 package go_queue
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 
@@ -15,7 +16,10 @@ type Queue struct {
 	jobs        []contract.Job
 	log         *slog.Logger
 	machinery   *Machinery
+	metrics     *metricsRegistry
 }
+
+var _ contract.StatsReader = (*Queue)(nil)
 
 func NewQueue(connections *Connections, log *slog.Logger, debug bool) *Queue {
 	if log == nil {
@@ -29,25 +33,27 @@ func NewQueue(connections *Connections, log *slog.Logger, debug bool) *Queue {
 		mlog.SetFatal(newMachineryLogger(log, slog.LevelError, true))
 	})
 
-	return &Queue{
+	queue := &Queue{
 		connections: connections,
 		log:         log,
 		machinery:   NewMachinery(connections, log),
 	}
+	queue.metrics = newMetricsRegistry(connections, log)
+	return queue
 }
 
 func (q *Queue) Worker(args ...contract.Args) contract.Worker {
 	defaultConnection := q.connections.GetDefault()
 
 	if len(args) == 0 {
-		return NewWorker(q.connections, q.log, 1, defaultConnection, q.jobs, "default")
+		return newWorker(q.connections, q.log, 1, defaultConnection, q.jobs, "default", q.metrics)
 	}
 
 	if args[0].Connection == "" {
 		args[0].Connection = defaultConnection
 	}
 
-	return NewWorker(q.connections, q.log, args[0].Concurrent, args[0].Connection, q.jobs, args[0].Queue).WithRateLimit(args[0].RateLimit)
+	return newWorker(q.connections, q.log, args[0].Concurrent, args[0].Connection, q.jobs, args[0].Queue, q.metrics).WithRateLimit(args[0].RateLimit)
 }
 
 func (q *Queue) Register(jobs []contract.Job) {
@@ -59,9 +65,25 @@ func (q *Queue) GetJobs() []contract.Job {
 }
 
 func (q *Queue) Job(job contract.Job, args []contract.Arg) contract.Task {
-	return newTask(q.connections, q.machinery, job, args)
+	task := newTask(q.connections, q.machinery, job, args)
+	task.metrics = q.metrics
+	return task
 }
 
 func (q *Queue) Chain(jobs []contract.Jobs) contract.Task {
-	return newChainTask(q.connections, q.machinery, jobs)
+	task := newChainTask(q.connections, q.machinery, jobs)
+	task.metrics = q.metrics
+	return task
+}
+
+func (q *Queue) Stats(ctx context.Context, connection ...string) (contract.Stats, error) {
+	name := ""
+	if len(connection) > 0 {
+		name = connection[0]
+	}
+	return q.metrics.stats(ctx, name)
+}
+
+func (q *Queue) Close() error {
+	return q.metrics.close()
 }
